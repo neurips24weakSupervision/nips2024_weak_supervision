@@ -1,1 +1,21 @@
 # nips2024_weak_supervision
+This repository contains the code for the publication "Object-Centric Representation Learning with Weakly Supervised Slot Attention," which was submitted to NIPS 2024.
+
+The code is an extended version of Slot Attention's initial implementation: https://github.com/google-research/google-research/tree/master/slot_attention
+
+# Model Training:
+Start the training procedure via: 
+python -m nips2024_weak_supervision.object_discovery.train --training_strategy=mask --model_complexity=cnn --weighting_factor=0.1 --model_dir=$checkpoint_path$
+
+Possible options for "training_strategy" are:
+-"mask"
+-"label"
+-"unsupervised"
+
+Possible options for "model_complexity" are:
+-"unsupervised"
+-"resnet"
+
+# Dataset
+The code is designed to work on the Clevrtex dataset. Dataset processing is described by Biza et al.:
+https://github.com/google-research/google-research/tree/master/invariant_slot_attention/datasets/clevrtex
