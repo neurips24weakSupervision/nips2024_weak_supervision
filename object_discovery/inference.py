@@ -22,7 +22,7 @@ from absl import flags
 from absl import logging
 import tensorflow as tf
 
-import github.data_train as data_utils
+import github.data_test as data_utils
 import github.model_cnn_unsupervised as model_utils_unsupervised_cnn
 import github.model_resnet_unsupervised as model_utils_unsupervised_resnet
 import github.model_cnn_label as model_utils_label_cnn
@@ -30,54 +30,15 @@ import github.model_resnet_label as model_utils_label_resnet
 import github.model_cnn_masks as model_utils_mask_cnn
 import github.model_resnet_masks as model_utils_mask_resnet
 import github.utils as utils
-
+import numpy as np
 FLAGS = flags.FLAGS
 flags.DEFINE_string("model_dir", "example_dir",
                     "Where to save the checkpoints.")
 flags.DEFINE_integer("seed", 42, "Random seed.")
-flags.DEFINE_float("learning_rate", 0.0002, "Learning rate.")
-flags.DEFINE_integer("num_train_steps", 500000, "Number of training steps.")
-flags.DEFINE_integer("warmup_steps", 50000,
-                     "Number of warmup steps for the learning rate.")
-flags.DEFINE_float("decay_rate", 0.5, "Rate for the learning rate decay.")
 flags.DEFINE_string("training_strategy", "unsupervised", "Supervision Type: either unsupervised, label, or mask.")
 flags.DEFINE_string("model_complexity", "cnn", "Size of the model: either cnn or resnet")
 flags.DEFINE_float("weighting_factor",0.1 , "Learning rate.")
-flags.DEFINE_integer("decay_steps", 100000,
-                     "Number of steps for the learning rate decay.")
 
-def train_step_prediction(batch, model, optimizer,step,max_steps,weighting, isMask):
-  """Perform a single training step."""
-
-  # Get the prediction of the models and compute the loss.
-  with tf.GradientTape() as tape:
-    preds = model(batch["image"], training=True)
-    recon_combined, recons, masks, slots, predictions = preds
-    loss_value1 = utils.l2_loss(batch["image"], recon_combined)
-    if isMask:
-      loss_value2 = abs((weighting - weighting/max_steps * step))*utils.hungarian_huber_loss(predictions, batch["target_mask"])
-    else:
-      loss_value2 = abs((weighting - weighting/max_steps * step))*utils.hungarian_huber_loss(predictions, batch["target"])
-    loss_value = loss_value1 + loss_value2
-    del recons, masks, slots  # Unused.
-
-  gradients = tape.gradient(loss_value, model.trainable_weights)
-  optimizer.apply_gradients(zip(gradients, model.trainable_weights))
-  return loss_value, loss_value1, loss_value2
-
-def train_step_reconstruction(batch, model, optimizer, step):
-  """Perform a single training step."""
-
-  # Get the prediction of the models and compute the loss.
-  with tf.GradientTape() as tape:
-    preds = model(batch["image"], training=True)
-    recon_combined, recons, masks, slots = preds
-    loss_value = utils.l2_loss(batch["image"], recon_combined)
-    del recons, masks, slots  # Unused.
-
-  gradients = tape.gradient(loss_value, model.trainable_weights)
-  optimizer.apply_gradients(zip(gradients, model.trainable_weights))
-  return loss_value
 
 
 def main(argv):
@@ -85,22 +46,15 @@ def main(argv):
   batch_size = 32
   num_slots = 11
   num_iterations = 3
-  weighting_factor = FLAGS.weighting_factor
-  base_learning_rate = FLAGS.learning_rate
-  num_train_steps = FLAGS.num_train_steps
-  warmup_steps = FLAGS.warmup_steps
-  decay_rate = FLAGS.decay_rate
-  decay_steps = FLAGS.decay_steps
   supervision_type = FLAGS.training_strategy
   complexity_type = FLAGS.model_complexity
   tf.random.set_seed(FLAGS.seed)
   resolution = (128, 128)
   # Build dataset iterators, optimizers and model.
   data_iterator = data_utils.build_clevrtex_iterator(
-      batch_size,resolution=resolution, shuffle=True,
+      batch_size, resolution=resolution, shuffle=True,
       get_properties=False, apply_crop=True)
 
-  optimizer = tf.keras.optimizers.legacy.Adam(base_learning_rate, epsilon=1e-08)
 
  # Prepare checkpoint manager.
   global_step = tf.Variable(
@@ -132,7 +86,7 @@ def main(argv):
     return
 
   ckpt = tf.train.Checkpoint(
-      network=model, optimizer=optimizer, global_step=global_step)
+      network=model, global_step=global_step)
   ckpt_manager = tf.train.CheckpointManager(
       checkpoint=ckpt, directory=FLAGS.model_dir, max_to_keep=200)
   ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -142,40 +96,33 @@ def main(argv):
   else:
     logging.info("Initializing from scratch")
 
-
-  start = time.time()
-  for _ in range(num_train_steps):
+  all_predictions = []
+  all_recons = []
+  all_masks_predicted = []
+  all_images = []
+  all_properties = []
+  all_slots = []
+  all_masks = []
+  for i in range(156):  
     batch = next(data_iterator)
-
-    # Learning rate warm-up.
-    if global_step < warmup_steps:
-      learning_rate = base_learning_rate * tf.cast(
-          global_step, tf.float32) / tf.cast(warmup_steps, tf.float32)
-    else:
-      learning_rate = base_learning_rate
-    learning_rate = learning_rate * (decay_rate ** (
-        tf.cast(global_step, tf.float32) / tf.cast(decay_steps, tf.float32)))
-    optimizer.lr = learning_rate.numpy()
     if supervision_type == "unsupervised":
-      loss_value = train_step_reconstruction(batch, model, optimizer,global_step.numpy())
-      if not global_step % 100:
-        logging.info("Step: %s, Loss: %.6f,Time: %s",
-                     global_step.numpy(), loss_value,
-                     datetime.timedelta(seconds=time.time() - start))
+      recons_combined, recons, masks, slots = model.predict(batch["image"])
     else:
-      loss_value, recon_loss, pred_loss = train_step_prediction(batch, model, optimizer, global_step.numpy(), num_train_steps, weighting_factor, supervision_type=="mask")
-      if not global_step % 100:
-        logging.info("Step: %s, Loss: %.6f, Loss Recon: %.6f,Loss Pred: %.6f,Time: %s",
-                     global_step.numpy(), loss_value,recon_loss,pred_loss,
-                     datetime.timedelta(seconds=time.time() - start))
+      recons_combined, recons, masks, slots, _ = model.predict(batch["image"])
+    all_images.append(np.array(batch["image"]))
+    all_masks.append(np.array(batch["mask"]))
+    all_recons.append(recons)
+    all_predictions.append(np.array(recons_combined))
+    all_masks_predicted.append(np.array(masks))
+    all_properties.append(np.array(batch["target"]))
+    all_slots.append(np.array(slots))
 
-
-
-
-    global_step.assign_add(1)
-    if not global_step  % 1000:
-      saved_ckpt = ckpt_manager.save()
-      logging.info("Saved checkpoint: %s", saved_ckpt)
-
+  np.save(FLAGS.model_dir + "/all_images.npy", np.array(all_images))
+  np.save(FLAGS.model_dir + "/all_masks.npy", np.array(all_masks))
+  np.save(FLAGS.model_dir + "/all_recons.npy", np.array(all_recons))
+  np.save(FLAGS.model_dir + "/all_predictions.npy", np.array(all_predictions))
+  np.save(FLAGS.model_dir + "/all_masks_predicted.npy", np.array(all_masks_predicted))
+  np.save(FLAGS.model_dir + "/all_properties.npy", np.array(all_properties))
+  np.save(FLAGS.model_dir + "/all_slots.npy", np.array(all_slots))
 if __name__ == "__main__":
   app.run(main)

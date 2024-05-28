@@ -46,7 +46,7 @@ def preprocess_clevrtex(features, resolution, apply_crop=False,
   image = tf.image.resize(
       image, resolution, method=tf.image.ResizeMethod.BILINEAR)
   masks = tf.image.resize(
-      masks, resolution, method=tf.image.ResizeMethod.BILINEAR)
+      masks, resolution, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
   max_n_objects = 11
 
 
@@ -98,7 +98,7 @@ def preprocess_clevrtex(features, resolution, apply_crop=False,
 def build_clevrtex(resolution=(128, 128), shuffle=False,
                 num_eval_examples=512, get_properties=True, apply_crop=False):
   """Build CLEVRTEX dataset."""
-  ds,info = tfds.load("clevr_tex:2.0.0", with_info=True, split="train", shuffle_files=True)
+  ds,info = tfds.load("clevr_tex:2.0.0", with_info=True, split="testing", shuffle_files=False)
   logging.info(info)
 
   def _preprocess_fn(x, resolution):
