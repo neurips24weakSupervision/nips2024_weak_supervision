@@ -215,7 +215,7 @@ class SlotAttentionAutoEncoder(layers.Layer):
         layers.Dense(64)
     ], name="decode")
     self.predictions = tf.keras.Sequential([
-        layers.Dense(101, activation="sigmoid")
+        layers.Dense(3 + 3 + 4 + 60, activation="sigmoid")
     ], name="predictions")
   def call(self, image):
     x = self.encoder_cnn(image) 
