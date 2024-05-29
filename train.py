@@ -36,14 +36,14 @@ def train_step_prediction(batch, model, optimizer,step,max_steps,weighting, isMa
   # Get the prediction of the models and compute the loss.
   with tf.GradientTape() as tape:
     preds = model(batch["image"], training=True)
-    recon_combined, recons, masks, slots, predictions, s_p, s_s = preds
+    recon_combined, recons, masks, slots, predictions = preds
     loss_value1 = utils.l2_loss(batch["image"], recon_combined)
     if isMask:
       loss_value2 = abs((weighting - weighting/max_steps * step))*utils.hungarian_huber_loss(predictions, batch["target_mask"])
     else:
       loss_value2 = abs((weighting - weighting/max_steps * step))*utils.hungarian_huber_loss(predictions, batch["target"])
     loss_value = loss_value1 + loss_value2
-    del recons, masks, slots, s_p, s_s  # Unused.
+    del recons, masks, slots  # Unused.
 
   gradients = tape.gradient(loss_value, model.trainable_weights)
   optimizer.apply_gradients(zip(gradients, model.trainable_weights))
@@ -55,9 +55,9 @@ def train_step_reconstruction(batch, model, optimizer, step):
   # Get the prediction of the models and compute the loss.
   with tf.GradientTape() as tape:
     preds = model(batch["image"], training=True)
-    recon_combined, recons, masks, slots, s_p, s_s = preds
+    recon_combined, recons, masks, slots = preds
     loss_value = utils.l2_loss(batch["image"], recon_combined)
-    del recons, masks, slots, s_p, s_s  # Unused.
+    del recons, masks, slots  # Unused.
 
   gradients = tape.gradient(loss_value, model.trainable_weights)
   optimizer.apply_gradients(zip(gradients, model.trainable_weights))
@@ -81,8 +81,8 @@ def main(argv):
   resolution = (128, 128)
   # Build dataset iterators, optimizers and model.
   data_iterator = data_utils.build_clevrtex_iterator(
-      batch_size,resolution=resolution, shuffle=True,
-      get_properties=False, apply_crop=True)
+      batch_size, split="train", resolution=resolution, shuffle=True,
+      max_n_objects=6, get_properties=False, apply_crop=True)
 
   optimizer = tf.keras.optimizers.legacy.Adam(base_learning_rate, epsilon=1e-08)
 
