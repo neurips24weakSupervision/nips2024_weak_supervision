@@ -52,14 +52,14 @@ def train_step_prediction(batch, model, optimizer,step,max_steps,weighting, isMa
   # Get the prediction of the models and compute the loss.
   with tf.GradientTape() as tape:
     preds = model(batch["image"], training=True)
-    recon_combined, recons, masks, slots, predictions = preds
+    recon_combined, recons, masks, slots, predictions, s_p, s_s = preds
     loss_value1 = utils.l2_loss(batch["image"], recon_combined)
     if isMask:
       loss_value2 = abs((weighting - weighting/max_steps * step))*utils.hungarian_huber_loss(predictions, batch["target_mask"])
     else:
       loss_value2 = abs((weighting - weighting/max_steps * step))*utils.hungarian_huber_loss(predictions, batch["target"])
     loss_value = loss_value1 + loss_value2
-    del recons, masks, slots  # Unused.
+    del recons, masks, slots, s_p, s_s  # Unused.
 
   gradients = tape.gradient(loss_value, model.trainable_weights)
   optimizer.apply_gradients(zip(gradients, model.trainable_weights))
@@ -71,9 +71,9 @@ def train_step_reconstruction(batch, model, optimizer, step):
   # Get the prediction of the models and compute the loss.
   with tf.GradientTape() as tape:
     preds = model(batch["image"], training=True)
-    recon_combined, recons, masks, slots = preds
+    recon_combined, recons, masks, slots, s_p, s_s = preds
     loss_value = utils.l2_loss(batch["image"], recon_combined)
-    del recons, masks, slots  # Unused.
+    del recons, masks, slots, s_p, s_s  # Unused.
 
   gradients = tape.gradient(loss_value, model.trainable_weights)
   optimizer.apply_gradients(zip(gradients, model.trainable_weights))

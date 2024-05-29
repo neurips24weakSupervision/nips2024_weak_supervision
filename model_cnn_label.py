@@ -230,7 +230,7 @@ class SlotAttentionAutoEncoder(layers.Layer):
     recons, masks = unstack_and_split(x, batch_size=image.shape[0])
     masks = tf.nn.softmax(masks, axis=1)
     recon_combined = tf.reduce_sum(recons * masks, axis=1)
-    return recon_combined, recons, masks, slots, predictions
+    return recon_combined, recons, masks, slots, predictions, s_p, s_s
 
 
 def build_grid(resolution):

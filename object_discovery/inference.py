@@ -103,12 +103,14 @@ def main(argv):
   all_properties = []
   all_slots = []
   all_masks = []
+  all_positions = []
+  all_sizes = []
   for i in range(156):  
     batch = next(data_iterator)
     if supervision_type == "unsupervised":
-      recons_combined, recons, masks, slots = model.predict(batch["image"])
+      recons_combined, recons, masks, slots, s_p, s_s = model.predict(batch["image"])
     else:
-      recons_combined, recons, masks, slots, _ = model.predict(batch["image"])
+      recons_combined, recons, masks, slots, _, s_p, s_s = model.predict(batch["image"])
     all_images.append(np.array(batch["image"]))
     all_masks.append(np.array(batch["mask"]))
     all_recons.append(recons)
@@ -116,6 +118,8 @@ def main(argv):
     all_masks_predicted.append(np.array(masks))
     all_properties.append(np.array(batch["target"]))
     all_slots.append(np.array(slots))
+    all_positions.append(np.array(s_p))
+    all_sizes.append(np.array(s_s))
 
   np.save(FLAGS.model_dir + "/all_images.npy", np.array(all_images))
   np.save(FLAGS.model_dir + "/all_masks.npy", np.array(all_masks))
@@ -124,5 +128,7 @@ def main(argv):
   np.save(FLAGS.model_dir + "/all_masks_predicted.npy", np.array(all_masks_predicted))
   np.save(FLAGS.model_dir + "/all_properties.npy", np.array(all_properties))
   np.save(FLAGS.model_dir + "/all_slots.npy", np.array(all_slots))
+  np.save(FLAGS.model_dir + "/all_positions.npy", np.array(all_positions))
+  np.save(FLAGS.model_dir + "/all_positions.npy", np.array(all_positions))
 if __name__ == "__main__":
   app.run(main)

@@ -129,7 +129,7 @@ class SlotAttention(layers.Layer):
         slots, _ = self.gru(updates, [slots_prev])
         slots += self.mlp(self.norm_mlp(slots))
 
-    return slots, s_p,s_s,attn
+    return slots, s_p, s_s, attn, s_p, s_s
 
 
 def spatial_broadcast(slots, resolution,rel_s_p,rel_s_s,batch_size):

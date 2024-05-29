@@ -129,7 +129,7 @@ class SlotAttention(layers.Layer):
         slots, _ = self.gru(updates, [slots_prev])
         slots += self.mlp(self.norm_mlp(slots))
 
-    return slots, s_p,s_s,attn
+    return slots, s_p, s_s, attn
 
 
 def spatial_broadcast(slots, resolution,rel_s_p,rel_s_s,batch_size):
@@ -230,7 +230,7 @@ class SlotAttentionAutoEncoder(layers.Layer):
     masks = tf.nn.softmax(masks, axis=1)
     recon_combined = tf.reduce_sum(recons * masks, axis=1)  # Recombine image.
     masks2 = tf.reshape(masks,[32, 11, 128*128]) 
-    return recon_combined, recons, masks, slots, masks2
+    return recon_combined, recons, masks, slots, masks2, s_p, s_s
 
 
 def build_grid(resolution):
