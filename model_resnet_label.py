@@ -5,20 +5,31 @@ from tensorflow.keras import layers, models
 from tensorflow.keras import models
 
 
+"""Calculate position and scaling parameters for position and scaling invariant slot attention"""
 def calcSP(attn,resolution,batch_size):
+    """
+    Args:
+    attn: Attention values of slot attention
+    resolution: resolution of the last feature map of the encoder
+    batch_size: the batch size (in our case 32)
+    """
+
+    #build a grid and expand grid and attn to match sizes
     grid = build_grid(resolution)
     grid =  tf.expand_dims(grid, axis=1)
     grid =  tf.broadcast_to(grid, (batch_size,11,resolution[0],resolution[1],2))
     attn = tf.reshape(attn,(batch_size,11,resolution[0],resolution[1]))
     attn = tf.expand_dims(attn, axis= - 1)
+    
+    #calculate the weighted sum for the position invariant parameter
     gridRel = tf.multiply(grid, attn)
     weighted_sum_p = tf.reduce_sum(gridRel, axis=[2, 3])
 
+    #calculate the scaling invariant parameters
     rel_s_p = weighted_sum_p[:, :, :2]
     rel_s_p = tf.expand_dims(rel_s_p, axis=-2)
     rel_s_p = tf.expand_dims(rel_s_p, axis=-2)
     rel_s_p =  tf.broadcast_to(rel_s_p, (batch_size,11,resolution[0],resolution[1],2))
-
     grid = grid - rel_s_p 
     grid = tf.math.square(grid)
     attn = attn + 0.00000000001
@@ -41,9 +52,11 @@ class SlotAttention(layers.Layer):
       num_slots: Number of slots.
       slot_size: Dimensionality of slot feature vectors.
       mlp_hidden_size: Hidden layer size of MLP.
-      epsilon: Offset for attention coefficients before normalization.
-    """
+      batch_size: the batch size (in our case 32)
+      """
     super().__init__()
+
+    #initialize MLPs and learnable slots
     self.num_iterations = num_iterations
     self.num_slots = num_slots
     self.slot_size = slot_size
@@ -79,26 +92,43 @@ class SlotAttention(layers.Layer):
         layers.Dense(64)
     ], name="feedforward")
 
-
+    #relative position MLP
     self.encoder_rel_pos = SoftPositionEmbed_rel(self.resolution,32)
+
+    #absolute position MLP (only applied once at the beginning of slot attention)
     self.encoder_start = SoftPositionEmbed_start(self.resolution,32)
+
   def call(self, inputs):
     num_inputs = inputs.shape[1]
+
+    #broadcast position invariant parameters to slot size
     s_p = tf.random.uniform(shape=(32, 11, 2), minval=-1, maxval=1)
     s_s = tf.random.normal(shape=(32, 11, 2), mean=0.1, stddev=0.01)
 
-
+    #initialize slots and broadcast to batch size
     slots = self.slots_mu 
     slots = tf.broadcast_to(slots,(32,11,64))
+
+    #position invariant encoding
     inputs = self.encoder_start(inputs)
     inputs = spatial_flatten(inputs)
+
+    #project keys and values
     inputs_k = self.project_k(inputs)
     inputs_v = self.project_v(inputs)
+
+
     for ind in range(self.num_iterations +1):
+
+       #apply relative position encoding
       inputs_k_rel = self.encoder_rel_pos(inputs_k, s_p, s_s)
       inputs_v_rel = self.encoder_rel_pos(inputs_v, s_p, s_s)
+
+      #calculate keys and values
       k = self.mlp_inputs(inputs_k_rel)
       v = self.mlp_inputs(inputs_v_rel)
+
+      #calculate attention
       slots_prev = slots
       slots = self.norm_slots(slots)
       q = self.project_q(slots)
@@ -111,6 +141,8 @@ class SlotAttention(layers.Layer):
       attn /= tf.reduce_sum(attn, axis=-2, keepdims=True)
       attn2 = tf.expand_dims(attn, -1)
       updates = tf.reduce_sum(tf.transpose(attn2,perm=[0,2,1,3]) * v, axis=2)
+
+      #update position variables
       s_p,s_s = calcSP(spatial_unflatten(tf.transpose(attn,perm=[0,2,1]),num_inputs),(16,16),32)
       s_s = tf.clip_by_value(s_s, clip_value_min=0.001, clip_value_max=5)
       if ind < self.num_iterations:
@@ -121,7 +153,7 @@ class SlotAttention(layers.Layer):
 
 
 def spatial_broadcast(slots, resolution,rel_s_p,rel_s_s,batch_size):
-  """Broadcast slot features to a 2D grid and collapse slot dimension."""
+  """Broadcast slot features to a 2D grid and collapse slot dimension. Broadcast position and scale invariance to grid"""
   slots = tf.reshape(slots, [-1, slots.shape[-1]])[:, None, None, :]
   grid = build_grid(resolution)
   grid =  tf.broadcast_to(grid, (batch_size,11,resolution[0],resolution[1] ,2))    
@@ -137,9 +169,11 @@ def spatial_broadcast(slots, resolution,rel_s_p,rel_s_s,batch_size):
   return grid, rel_grid
 
 
+"""Helper function to spatially flatten 2D input to 1D series"""
 def spatial_flatten(x):
   return tf.reshape(x, [x.shape[0], x.shape[1], x.shape[2] * x.shape[3], x.shape[-1]])
 
+"""Helper function to spatially re-flatten 1D series to 2D features"""
 def spatial_unflatten(x,num_inputs):
   return tf.reshape(x, [x.shape[0],  num_inputs, num_inputs, 11])
 
@@ -204,25 +238,43 @@ class SlotAttentionAutoEncoder(layers.Layer):
     ], name="decode")
 
     self.predictions = tf.keras.Sequential([
-        layers.Dense(3 + 3 + 4 + 60), activation="sigmoid")
+        layers.Dense(3 + 3 + 4 + 60, activation="sigmoid")
     ], name="predictions")
 
   def call(self, image):
-    x = self.encoder_res(image) 
+    #encode image
+    x = self.encoder_cnn(image) 
 
+    #apply slot attention
     slots,s_p,s_s,attn = self.slot_attention(x)
+
+    #predict properties from slots
     concat = tf.concat([slots,s_p],axis=-1)
     predictions = self.predictions(tf.concat([concat,s_s],axis=-1))
+
+
+    #spatially broadcast slots and relative grid
     x, rel = spatial_broadcast(slots, self.decoder_initial_size,s_p,s_s,32)
+
+    #add relative grid encoding to slots
     x = x + self.dense_pos_decode(rel)
     x = self.mlp_inputs_decode(x)
+
+    #decode cnn
     x = self.decoder_cnn(x)
+
+    #split 3D recons and 1D masks (RGB and alpha-mask)
     recons, masks = unstack_and_split(x, batch_size=image.shape[0])
+
+    #argmax over slots
     masks = tf.nn.softmax(masks, axis=1)
+
+    #recombine RGB and alpha mask
     recon_combined = tf.reduce_sum(recons * masks, axis=1)
     return recon_combined, recons, masks, slots, predictions, s_p, s_s
 
 def build_grid(resolution):
+  """build 2D grid from -1 to 1"""
   ranges = [np.linspace(-1., 1., num=res) for res in resolution]
   grid = np.meshgrid(*ranges, sparse=False, indexing="ij")
   grid = np.stack(grid, axis=-1)
@@ -235,11 +287,11 @@ class SoftPositionEmbed_start(layers.Layer):
   """Adds soft positional embedding with learnable projection."""
 
   def __init__(self, resolution,batch_size):
-    """Builds the soft position embedding layer.
+    """Builds the soft position embedding layer used for absolute position encoding.
 
     Args:
-      hidden_size: Size of input feature dimension.
       resolution: Tuple of integers specifying width and height of grid.
+      batch_size: batch size of training/inference (in our case 32)
     """
     super().__init__()
     self.resolution = resolution
@@ -249,7 +301,7 @@ class SoftPositionEmbed_start(layers.Layer):
     ], name="dense")
     self.grid = build_grid(resolution)
     self.batch_size = batch_size
-
+  #build absolute grid and add to input
   def call(self, inputs):
     grid =  tf.expand_dims(self.grid, axis=1)
     grid =  tf.broadcast_to(grid, (self.batch_size,11,self.resolution[0],self.resolution[1] ,2))    
@@ -261,11 +313,11 @@ class SoftPositionEmbed_rel(layers.Layer):
   """Adds soft positional embedding with learnable projection."""
 
   def __init__(self, resolution,batch_size):
-    """Builds the soft position embedding layer.
+    """Builds the soft position embedding layer used for relative position encoding.
 
     Args:
-      hidden_size: Size of input feature dimension.
       resolution: Tuple of integers specifying width and height of grid.
+      batch_size: batch size of training/inference (in our case 32)
     """
     super().__init__()
     self.resolution = resolution
@@ -275,6 +327,7 @@ class SoftPositionEmbed_rel(layers.Layer):
     self.grid = build_grid(resolution)
     self.batch_size = batch_size
 
+  #add relative grid to inputs
   def call(self, inputs, rel_s_p,rel_s_s):
     grid =  tf.expand_dims(self.grid, axis=1)
     grid =  tf.broadcast_to(grid, (self.batch_size,11,self.resolution[0],self.resolution[1] ,2))    
@@ -301,6 +354,7 @@ def build_model(resolution, batch_size, num_slots, num_iterations,
 
 
 
+#definitions for the resnet encoder
 def conv_block(input_layer, filters, strides=(1, 1)):
     x = layers.Conv2D(filters, kernel_size=3, strides=strides, padding="same")(input_layer)
     x = layers.LayerNormalization()(x)
