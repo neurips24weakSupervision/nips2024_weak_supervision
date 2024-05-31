@@ -113,6 +113,7 @@ def main(argv):
   np.save(FLAGS.model_dir + "/all_properties.npy", np.array(all_properties))
   np.save(FLAGS.model_dir + "/all_slots.npy", np.array(all_slots))
   np.save(FLAGS.model_dir + "/all_positions.npy", np.array(all_positions))
-  np.save(FLAGS.model_dir + "/all_positions.npy", np.array(all_positions))
+  np.save(FLAGS.model_dir + "/all_sizes.npy", np.array(all_sizes))
+    
 if __name__ == "__main__":
   app.run(main)
