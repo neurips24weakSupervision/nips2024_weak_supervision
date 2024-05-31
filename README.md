@@ -16,6 +16,22 @@ Possible options for "model_complexity" are:
 -"unsupervised"
 -"resnet"
 
+# Inference:
+Inference is started with: 
+python -m nips2024_weak_supervision.object_discovery.inference --training_strategy=mask --model_complexity=cnn --weighting_factor=0.1 --model_dir=$checkpoint_path$
+
+Possible options for "training_strategy" are:
+-"mask"
+-"label"
+-"unsupervised"
+
+Possible options for "model_complexity" are:
+-"unsupervised"
+-"resnet"
+
+The inference output is several numpy arrays stored in the $checkpoint_path$. Those are needed for the evaluation in the evaluation/ folder.
+
+
 # Dataset
 The code is designed to work on the Clevrtex dataset. Dataset processing is described by Biza et al.:
 https://github.com/google-research/google-research/tree/master/invariant_slot_attention/datasets/clevrtex
