@@ -1,7 +1,7 @@
 # nips2024_weak_supervision
 This repository contains the code for the publication "Object-Centric Representation Learning with Weakly Supervised Slot Attention," which was submitted to NIPS 2024.
 
-The code is an extended version of Slot Attention's initial implementation: https://github.com/google-research/google-research/tree/master/slot_attention
+The code is an extended version of Slot Attention's initial implementation: https://github.com/google-research/google-research/tree/master/slot_attention . Make sure to install the specified packages.
 
 # Model Training:
 Start the training procedure via: 
