@@ -16,6 +16,8 @@ Possible options for "model_complexity" are:
 -"unsupervised"
 -"resnet"
 
+Model training requires the Clevrtex dataset to be compiled (see below).
+
 # Inference:
 Inference is started with: 
 python -m nips2024_weak_supervision.object_discovery.inference --training_strategy=mask --model_complexity=cnn --weighting_factor=0.1 --model_dir=$checkpoint_path$
