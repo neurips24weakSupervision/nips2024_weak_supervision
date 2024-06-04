@@ -33,6 +33,9 @@ Possible options for "model_complexity" are:
 
 The inference output is several numpy arrays stored in the $checkpoint_path$. Those are needed for the evaluation in the evaluation/ folder.
 
+# Evaluation:
+We evaluate models on their object discovery capability. Additionally, we assess slots for their representation quality of underlying generating factors. Therefore, we bind slots to their underlying objects and run prediction and disentanglement tests. We use a modified version of the disentanglement library: https://github.com/google-research/disentanglement_lib
+
 
 # Dataset
 The code is designed to work on the Clevrtex dataset. Dataset processing is described by Biza et al.:
